@@ -36,12 +36,12 @@ async function connectedClient() {
   return client;
 }
 
-test('o servidor MCP expõe as cinco ferramentas', async () => {
+test('o servidor MCP expõe as seis ferramentas', async () => {
   const client = await connectedClient();
   const { tools } = await client.listTools();
   assert.deepEqual(
     tools.map((t) => t.name).sort(),
-    ['fivem_command', 'fivem_console', 'fivem_players', 'fivem_server_control', 'fivem_status']
+    ['fivem_command', 'fivem_console', 'fivem_logs', 'fivem_players', 'fivem_server_control', 'fivem_status']
   );
   await client.close();
 });

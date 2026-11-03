@@ -55,6 +55,7 @@ Requer Node 18+ (testado no 22) e um admin do txAdmin com permissão de console
 | `quietMs` | `FIVEM_QUIET_MS` | `900` — silêncio no console que fecha a captura |
 | `timeoutMs` | `FIVEM_TIMEOUT_MS` | `10000` — teto da captura |
 | `scrollback` | — | `2000` linhas guardadas em memória |
+| `logsDir` | `FIVEM_LOGS_DIR` | vazio — acha `txData/<perfil>/logs` pelo FXServer rodando na mesma máquina |
 
 ## Registrando nos agentes
 
@@ -101,6 +102,7 @@ mcp_servers:
 | --- | --- |
 | `fivem_command` | Executa qualquer comando no console e devolve a saída. Para resource, `ensure <resource>` é o padrão (inicia ou reinicia); `refresh` antes se o resource é novo no disco. `timeoutMs`, `quietMs` e `timestamps` são opcionais. |
 | `fivem_console` | Últimas linhas do console capturadas pela sessão, com `filter` por regex. |
+| `fivem_logs` | Arquivos de log do txAdmin: `fxserver.log` (dia inteiro, boots anteriores), dias rotacionados e `admin.log`. `sinceBoot` corta no último start, `filter` por regex, `list` mostra os arquivos. Só lê arquivo de dentro da pasta de logs. |
 | `fivem_status` | No ar?, hostname, jogadores, game build, nº de resources. |
 | `fivem_players` | Jogadores online com id, ping e identificadores. |
 | `fivem_server_control` | `start` / `stop` / `restart` do processo do servidor (derruba quem estiver online). |
@@ -120,6 +122,7 @@ mcp_servers:
 node src/index.js                   # MCP stdio (o normal)
 node src/index.js --http --port 8765  # MCP streamable HTTP em /mcp, para clientes que falam por URL
 node src/index.js --exec "refresh"  # um comando direto pelo terminal, sem agente no meio
+node src/index.js --logs "error"    # fxserver.log desde o último boot, filtrado
 node src/index.js --doctor          # diagnóstico da conexão
 ```
 

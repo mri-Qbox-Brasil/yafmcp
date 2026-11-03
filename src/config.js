@@ -18,6 +18,8 @@ const DEFAULTS = {
   timeoutMs: 10000,
   // Linhas de console guardadas em memória para fivem_console.
   scrollback: 2000,
+  // Pasta txData/<perfil>/logs. Vazio = procura a do FXServer rodando nesta máquina.
+  logsDir: '',
 };
 
 function fromFile() {
@@ -38,6 +40,7 @@ function fromEnv() {
     FIVEM_SERVER_URL: 'serverUrl',
     FIVEM_QUIET_MS: 'quietMs',
     FIVEM_TIMEOUT_MS: 'timeoutMs',
+    FIVEM_LOGS_DIR: 'logsDir',
   };
   for (const [key, field] of Object.entries(map)) {
     const raw = process.env[key];

@@ -10,6 +10,7 @@
  *   node src/index.js --http       # MCP por HTTP streamable (padrão: 127.0.0.1:8765)
  *   node src/index.js --doctor     # testa credenciais/conexão e sai
  *   node src/index.js --exec "..." # roda um comando direto pelo terminal e sai
+ *   node src/index.js --logs [regex] # últimas linhas do fxserver.log desde o último boot
  */
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
@@ -19,6 +20,7 @@ import { resolve as resolvePath } from 'node:path';
 
 import { loadConfig, CONFIG_PATH } from './config.js';
 import { TxAdminClient } from './txadmin.js';
+import { formatSize, listLogs, readLog, resolveLogsDir } from './logs.js';
 
 const VERSION = '1.0.0';
 
@@ -33,6 +35,9 @@ function parseArgs(argv) {
     else if (a === '--exec') {
       args.mode = 'exec';
       args.exec = argv[++i];
+    } else if (a === '--logs') {
+      args.mode = 'logs';
+      if (argv[i + 1] && !argv[i + 1].startsWith('--')) args.filter = argv[++i];
     } else if (a === '--port') args.port = Number(argv[++i]);
     else if (a === '--host') args.host = argv[++i];
   }
@@ -61,7 +66,8 @@ export function buildServer(cfg, tx) {
       instructions:
         'Operação do servidor FiveM. fivem_command executa qualquer comando no console do ' +
         'FXServer (via live console do txAdmin) e devolve a saída do console. Use fivem_status ' +
-        'e fivem_players para leitura rápida, fivem_console para reler o que já passou, e ' +
+        'e fivem_players para leitura rápida, fivem_console para reler o que já passou nesta ' +
+        'sessão, fivem_logs para os arquivos de log do txAdmin (boots e dias anteriores), e ' +
         'fivem_server_control apenas para start/stop/restart do processo do servidor.',
     }
   );
@@ -120,6 +126,52 @@ export function buildServer(cfg, tx) {
         return text(tx.tail({ lines, filter }));
       } catch (err) {
         return fail(`Falha ao ler o console: ${err.message}`);
+      }
+    }
+  );
+
+  server.registerTool(
+    'fivem_logs',
+    {
+      title: 'Ler os arquivos de log do servidor',
+      description:
+        'Lê os arquivos de log do txAdmin (txData/<perfil>/logs): fxserver.log é o console ' +
+        'do dia inteiro, inclusive de antes desta sessão e de boots anteriores; os dias ' +
+        'passados ficam em fxserver_AAAA-MM-DD_*.log, e admin.log tem as ações dos admins. ' +
+        'Use sinceBoot para ver só o que veio depois do último start do servidor, filter ' +
+        '(regex, sem diferenciar maiúsculas) para achar erros, e list para ver os arquivos.',
+      inputSchema: {
+        file: z.string().optional().describe('Arquivo da pasta de logs (padrão fxserver.log)'),
+        lines: z.number().int().min(1).max(5000).optional().describe('Quantas linhas do fim (padrão 200)'),
+        filter: z.string().optional().describe('Regex case-insensitive para filtrar as linhas'),
+        sinceBoot: z.boolean().optional().describe('Só a partir do último "FXServer Starting"'),
+        list: z.boolean().optional().describe('Lista os arquivos de log em vez de ler'),
+      },
+    },
+    async ({ file, lines, filter, sinceBoot, list }) => {
+      const dir = resolveLogsDir(cfg);
+      if (!dir) {
+        return fail(
+          'Pasta de logs não encontrada. Defina "logsDir" na config (ou FIVEM_LOGS_DIR) com o ' +
+            'caminho de txData/<perfil>/logs; sem ela, o yafmcp só acha a pasta quando roda na ' +
+            'mesma máquina do FXServer.'
+        );
+      }
+      try {
+        if (list) {
+          const rows = listLogs(dir).map(
+            (f) => `${f.name}  ${formatSize(f.size)}  ${f.mtime.toISOString().replace('T', ' ').slice(0, 19)}`
+          );
+          return text(`${dir}\n${rows.join('\n') || '(vazia)'}`);
+        }
+        const res = readLog(dir, { file, lines, filter, sinceBoot });
+        const head = [`${res.file}: ${res.lines.length} de ${res.matched} linha(s)`];
+        if (filter) head.push(`filtro /${filter}/i em ${res.total}`);
+        if (sinceBoot) head.push(res.bootFound ? `desde o boot de ${res.boot}` : 'sem boot neste arquivo, mostrando tudo');
+        if (res.truncated) head.push('arquivo grande: só o fim foi lido');
+        return text(`${head.join(' · ')}\n${res.lines.join('\n') || '(nenhuma linha)'}`);
+      } catch (err) {
+        return fail(`Falha ao ler o log: ${err.message}`);
       }
     }
   );
@@ -211,6 +263,7 @@ const HELP = `yafmcp ${VERSION} — comandos no console do FiveM, por MCP
   yafmcp --setup              grava URL/usuário/senha do txAdmin
   yafmcp --doctor             testa login, console e um comando
   yafmcp --exec "<comando>"   roda um comando e imprime a saída
+  yafmcp --logs [regex]       fxserver.log desde o último boot (filtro opcional)
 `;
 
 async function main() {
@@ -234,6 +287,17 @@ async function main() {
     process.exit(78); // EX_CONFIG
   }
   const tx = new TxAdminClient(cfg);
+
+  if (args.mode === 'logs') {
+    const dir = resolveLogsDir(cfg);
+    if (!dir) {
+      console.error('[yafmcp] pasta de logs não encontrada; defina "logsDir" na config');
+      process.exit(78);
+    }
+    const res = readLog(dir, { filter: args.filter, sinceBoot: true, lines: 200 });
+    console.log(res.lines.join('\n'));
+    return;
+  }
 
   if (args.mode === 'doctor') {
     console.log(`config:  ${CONFIG_PATH}`);
