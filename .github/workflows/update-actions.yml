@@ -1,0 +1,21 @@
+name: Update Actions Versions
+
+on:
+  schedule:
+    - cron: '0 0 1 * *'
+  workflow_dispatch:
+
+jobs:
+  update:
+    # Espelha o `permissions` do callable: declarar este bloco zera todo escopo
+    # omitido, e pedir menos do que o callable exige mata o run no startup.
+    permissions:
+      contents: write
+      pull-requests: write
+      packages: read
+      id-token: write # OIDC do Infisical
+    uses: mri-Qbox-Brasil/workflows/.github/workflows/callable-update-actions.yml@main
+    secrets:
+      GH_TOKEN: ${{ secrets.GH_TOKEN }}
+    with:
+      pr-team: ${{ vars.PR_TEAM }}

@@ -34,9 +34,9 @@ Ou do repositório, para mexer no código:
 ```bash
 git clone https://github.com/ggfto/yafmcp.git
 cd yafmcp
-npm install
-npm run setup     # pergunta URL do txAdmin, usuário e senha; grava 600 em ~/.config/yafmcp/config.json
-npm run doctor    # loga, conecta no console e roda um "version"
+pnpm install
+pnpm run setup     # pergunta URL do txAdmin, usuário e senha; grava 600 em ~/.config/yafmcp/config.json
+pnpm run doctor    # loga, conecta no console e roda um "version"
 ```
 
 Requer Node 18+ (testado no 22) e um admin do txAdmin com permissão de console
@@ -147,16 +147,22 @@ permissões reduzidas: a checagem de permissão é feita pelo próprio txAdmin.
 
 ## Publicando o pacote
 
-`.github/workflows/publish.yml` roda ao publicar uma **release** no GitHub (ou pela aba
-Actions) e manda o mesmo código para os dois registries:
+Mesmo esquema do `mri-ui-kit`, sem passo manual:
 
-- **npmjs.com** como `yafmcp`, público — precisa do segredo `NPM_TOKEN` (token de
-  automação da sua conta npm) em Settings → Secrets → Actions.
-- **GitHub Packages** como `@<owner>/yafmcp` — usa o `GITHUB_TOKEN` do próprio job, sem
-  segredo nenhum.
+- **Commits no padrão [Conventional Commits](https://www.conventionalcommits.org/)** — é
+  deles que sai a versão. `fix:` vira patch, `feat:` vira minor, `feat!:`/`BREAKING CHANGE`
+  vira major; `chore:`, `ci:`, `docs:`, `test:` não geram versão.
+- **`release.yml`** roda a cada push na `main`: testa e chama o `semantic-release`, que
+  bumpa o `package.json`, escreve o `CHANGELOG.md`, commita `chore(release): x.y.z` e cria
+  a tag e a release no GitHub. Não publica nada.
+- **`publish.yml`** roda logo depois (ou na mão, pela aba Actions) e publica no npmjs.com
+  por **trusted publishing (OIDC)**, sem `NPM_TOKEN`. Se a versão do `package.json` já
+  está no npm, não faz nada.
 
-Antes de publicar, suba a versão (`npm version patch|minor|major`), empurre a tag e crie
-a release. `.github/workflows/ci.yml` roda os testes em cada push, no Node 20 e 22.
+Configuração única no npmjs.com: pacote `yafmcp` → Settings → Trusted publisher → GitHub
+Actions, repositório `mri-Qbox-Brasil/yafmcp`, workflow `publish.yml`.
+
+`ci.yml` roda os testes em push e PR, no Node 20, 22 e 24.
 
 ## Licença
 

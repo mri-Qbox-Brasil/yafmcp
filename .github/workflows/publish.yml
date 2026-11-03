@@ -1,52 +1,83 @@
 name: Publish
 
-# Dispara ao publicar uma release no GitHub (ou na mão, pela aba Actions).
-# Segredos necessários:
-#   NPM_TOKEN — token de automação do npmjs.com, para o pacote público `yafmcp`
-# O GitHub Packages usa o GITHUB_TOKEN do próprio job, sem segredo extra.
+# Publica no npm via trusted publishing (OIDC) — sem NPM_TOKEN.
+#
+# O npm amarra a permissao ao NOME deste arquivo, entao ele precisa continuar
+# se chamando publish.yml: em npmjs.com > pacote > Settings > Trusted publisher
+# o campo "Workflow filename" tem que bater exatamente com "publish.yml".
+#
+# Trigger: workflow_run em vez de `release: published` ou `push: tags` porque o
+# GitHub NAO dispara workflows a partir de eventos criados pelo GITHUB_TOKEN —
+# e a release/tag do semantic-release e criada exatamente assim. workflow_run e
+# a excecao que continua disparando.
 on:
-  release:
-    types: [published]
+  workflow_run:
+    workflows: ["Release"]
+    types: [completed]
   workflow_dispatch:
 
 jobs:
-  npmjs:
+  publish:
+    name: Publish
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          registry-url: https://registry.npmjs.org
-          cache: npm
-      - run: npm ci
-      - run: npm test
-      - run: npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-  github-packages:
-    runs-on: ubuntu-latest
+    # No dispatch manual roda sempre; no automatico, so se a Release passou.
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     permissions:
       contents: read
-      packages: write
+      # Obrigatorio pro OIDC do trusted publishing.
+      id-token: write
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      # Explicito em main: o commit que dispara a Release e anterior ao
+      # `chore(release)` que bumpa a versao, entao o default do workflow_run
+      # poderia pegar o package.json antigo.
+      - uses: actions/checkout@v7
         with:
-          node-version: '22'
-          registry-url: https://npm.pkg.github.com
-          cache: npm
-      - run: npm ci
-      # O GitHub Packages só aceita pacote com escopo do dono do repositório;
-      # o nome publicado lá é @<owner>/yafmcp, o mesmo código do npmjs.
-      # Escopo npm não aceita maiúscula (o dono é mri-Qbox-Brasil): vai minúsculo.
-      - run: |
-          owner="$(echo "$OWNER" | tr '[:upper:]' '[:lower:]')"
-          npm pkg set name="@${owner}/yafmcp"
-          echo "@${owner}:registry=https://npm.pkg.github.com" >> .npmrc
-        env:
-          OWNER: ${{ github.repository_owner }}
-      - run: npm publish
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ref: main
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 9
+
+      # Sem `registry-url` de proposito: ele escreve um .npmrc esperando
+      # NODE_AUTH_TOKEN e atrapalha a autenticacao por OIDC.
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24.x
+          cache: 'pnpm'
+
+      # Trusted publishing exige npm >= 11.5.1; o npm que vem junto do Node 24
+      # pode ser mais antigo que isso.
+      - name: Update npm
+        run: npm install -g npm@latest
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # A Release roda a cada push na main, mas so gera versao nova quando ha
+      # commit que mereca. Sem esta guarda, um push de `chore:` faria o publish
+      # tentar republicar a versao atual e falhar com 403.
+      - name: Check if version is already published
+        id: check
+        run: |
+          NAME=$(node -p "require('./package.json').name")
+          VERSION=$(node -p "require('./package.json').version")
+          echo "Pacote: $NAME@$VERSION"
+          if npm view "$NAME@$VERSION" version > /dev/null 2>&1; then
+            echo "published=true" >> "$GITHUB_OUTPUT"
+            echo "Ja publicado — nada a fazer."
+          else
+            echo "published=false" >> "$GITHUB_OUTPUT"
+            echo "Ainda nao publicado — segue pro publish."
+          fi
+
+      - name: Test
+        if: steps.check.outputs.published == 'false'
+        run: pnpm test
+
+      # Provenance sai automatico no trusted publishing (repo e pacote publicos),
+      # sem precisar de --provenance.
+      - name: Publish
+        if: steps.check.outputs.published == 'false'
+        run: npm publish

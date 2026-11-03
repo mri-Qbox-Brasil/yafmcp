@@ -1,0 +1,71 @@
+name: Auto Assign PR
+
+on:
+  pull_request:
+    types: [opened, ready_for_review]
+
+jobs:
+  auto-assign:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+
+    steps:
+      - name: Auto-assign reviewers and assignees
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const prNumber = context.payload.pull_request.number;
+            const prAuthor = context.payload.pull_request.user.login;
+
+            try {
+              // 1. Fetch all collaborators
+              const { data: collaborators } = await github.rest.repos.listCollaborators({
+                owner,
+                repo,
+                affiliation: 'direct' // or 'all' to include outside collaborators
+              });
+
+              // 2. Filter logic:
+              // - Must have 'push' (write) access or higher (admin, maintain)
+              // - Must be a User (not a bot)
+              // - Must not be the PR author
+              const eligibleUsers = collaborators.filter(user => {
+                const hasAccess = user.permissions.admin || user.permissions.maintain || user.permissions.push;
+                const isNotAuthor = user.login !== prAuthor;
+                const isUser = user.type === 'User';
+
+                return hasAccess && isNotAuthor && isUser;
+              });
+
+              const userLogins = eligibleUsers.map(user => user.login);
+
+              if (userLogins.length > 0) {
+                console.log(`Found eligible users: ${userLogins.join(', ')}`);
+
+                // 3. Add Reviewers
+                await github.rest.pulls.requestReviewers({
+                  owner,
+                  repo,
+                  pull_number: prNumber,
+                  reviewers: userLogins
+                });
+                console.log('Requesting reviews from:', userLogins);
+
+                // 4. Add Assignees (Optional: if you want them assigned as well)
+                await github.rest.issues.addAssignees({
+                  owner,
+                  repo,
+                  issue_number: prNumber,
+                  assignees: userLogins
+                });
+                console.log('Assigned users:', userLogins);
+              } else {
+                console.log('No eligible users found to assign.');
+              }
+
+            } catch (error) {
+              console.error('Error auto-assigning:', error);
+              core.setFailed(error.message);
+            }
