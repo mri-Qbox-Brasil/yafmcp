@@ -22,7 +22,7 @@ import { loadConfig, CONFIG_PATH } from './config.js';
 import { TxAdminClient } from './txadmin.js';
 import { formatSize, listLogs, readLog, resolveLogsDir } from './logs.js';
 
-const VERSION = '1.0.0';
+const VERSION = '1.1.0';
 
 function parseArgs(argv) {
   const args = { mode: 'stdio', host: '127.0.0.1', port: 8765, exec: null };

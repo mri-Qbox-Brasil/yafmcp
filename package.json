@@ -1,6 +1,6 @@
 {
   "name": "yafmcp",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Yet another FiveM MCP — executa comandos no console do FiveM (via txAdmin) a partir de qualquer agente de IA",
   "type": "module",
   "bin": {
