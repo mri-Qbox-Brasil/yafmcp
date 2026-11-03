@@ -16,13 +16,15 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import { pathToFileURL } from 'node:url';
+import { createRequire } from 'node:module';
 import { resolve as resolvePath } from 'node:path';
 
 import { loadConfig, CONFIG_PATH } from './config.js';
 import { TxAdminClient } from './txadmin.js';
 import { formatSize, listLogs, readLog, resolveLogsDir } from './logs.js';
 
-const VERSION = '1.1.0';
+// Versão vem do package.json, que o semantic-release bumpa a cada release.
+const VERSION = createRequire(import.meta.url)('../package.json').version;
 
 function parseArgs(argv) {
   const args = { mode: 'stdio', host: '127.0.0.1', port: 8765, exec: null };
